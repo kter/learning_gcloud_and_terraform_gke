@@ -99,8 +99,7 @@ prepare-k8s-dev: ## Dev環境用にK8sマニフェストを準備
 	$(eval REPO_ID := todo-app-dev)
 	$(eval DB_IP := $(shell cd terraform && terraform output -raw db_private_ip))
 	$(eval DB_USER := $(shell cd terraform && terraform output -raw db_user))
-	$(eval DB_PASSWORD_RAW := $(shell cd terraform && terraform output -raw db_password))
-	$(eval DB_PASSWORD := $(shell printf '%s\n' '$(DB_PASSWORD_RAW)' | sed 's/[&/\]/\\&/g'))
+	$(eval DB_PASSWORD := $(shell cd terraform && terraform output -raw db_password | sed 's/[&#/%\]/\\&/g'))
 	$(eval SA_EMAIL := $(shell cd terraform && terraform output -raw service_account_email))
 	@mkdir -p k8s/generated/dev
 	@for file in k8s/*.yaml; do \
@@ -124,8 +123,7 @@ prepare-k8s-stg: ## Stg環境用にK8sマニフェストを準備
 	$(eval REPO_ID := todo-app-stg)
 	$(eval DB_IP := $(shell cd terraform && terraform output -raw db_private_ip))
 	$(eval DB_USER := $(shell cd terraform && terraform output -raw db_user))
-	$(eval DB_PASSWORD_RAW := $(shell cd terraform && terraform output -raw db_password))
-	$(eval DB_PASSWORD := $(shell printf '%s\n' '$(DB_PASSWORD_RAW)' | sed 's/[&/\]/\\&/g'))
+	$(eval DB_PASSWORD := $(shell cd terraform && terraform output -raw db_password | sed 's/[&#/%\]/\\&/g'))
 	$(eval SA_EMAIL := $(shell cd terraform && terraform output -raw service_account_email))
 	@mkdir -p k8s/generated/stg
 	@for file in k8s/*.yaml; do \
