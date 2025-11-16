@@ -22,7 +22,7 @@ spec:
         - containerPort: 3000
         env:
         - name: NUXT_PUBLIC_API_BASE
-          value: "http://backend:8000"
+          value: "https://DOMAIN"
         resources:
           requests:
             memory: "64Mi"
