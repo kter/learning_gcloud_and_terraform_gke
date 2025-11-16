@@ -201,3 +201,16 @@ destroy-stg: ## Stg環境のリソースを削除（注意：全てのリソー�
 		echo "Cancelled."; \
 	fi
 
+# 環境の停止・再開
+stop-dev: ## Dev環境を停止（ノード+Cloud SQLを停止して課金を削減）
+	@./scripts/stop-all.sh dev
+
+stop-stg: ## Stg環境を停止（ノード+Cloud SQLを停止して課金を削減）
+	@./scripts/stop-all.sh stg
+
+start-dev: ## Dev環境を再開（ノード+Cloud SQLを起動）
+	@./scripts/start-all.sh dev
+
+start-stg: ## Stg環境を再開（ノード+Cloud SQLを起動）
+	@./scripts/start-all.sh stg
+
