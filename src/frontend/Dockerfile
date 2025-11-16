@@ -3,11 +3,11 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# package.jsonとpackage-lock.jsonをコピー
+# package.jsonをコピー
 COPY package*.json ./
 
 # 依存関係のインストール
-RUN npm ci
+RUN npm install
 
 # アプリケーションコードをコピー
 COPY . .
