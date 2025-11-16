@@ -644,6 +644,10 @@ gcloud dns record-sets list --zone=dev-gcp-tomohiko-io \
 
 ## 📚 学習リソース
 
+### プロジェクト内ドキュメント
+
+- **[環境削除ガイド](docs/DESTROY_GUIDE.md)** - 完全削除コマンドの詳細な使い方とトラブルシューティング
+
 ### 公式ドキュメント
 
 - [Google Kubernetes Engine (GKE)](https://cloud.google.com/kubernetes-engine/docs)
