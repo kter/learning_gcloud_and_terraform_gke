@@ -230,3 +230,19 @@ resource "google_compute_managed_ssl_certificate" "default" {
   }
 }
 
+# 既存のCloud DNSゾーンを参照
+data "google_dns_managed_zone" "main" {
+  name    = local.dns_zone_name
+  project = local.project_id
+}
+
+# Ingress用のAレコードを自動登録
+resource "google_dns_record_set" "ingress" {
+  name         = "${local.domain}."
+  type         = "A"
+  ttl          = 300
+  managed_zone = data.google_dns_managed_zone.main.name
+  rrdatas      = [google_compute_global_address.ingress_ip.address]
+  project      = local.project_id
+}
+

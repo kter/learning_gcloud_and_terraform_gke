@@ -80,3 +80,18 @@ output "ssl_certificate_name" {
   value       = google_compute_managed_ssl_certificate.default.name
 }
 
+output "dns_zone_name" {
+  description = "Cloud DNS zone name"
+  value       = data.google_dns_managed_zone.main.name
+}
+
+output "dns_zone_dns_name" {
+  description = "Cloud DNS zone DNS name"
+  value       = data.google_dns_managed_zone.main.dns_name
+}
+
+output "dns_record_fqdn" {
+  description = "DNS record FQDN"
+  value       = google_dns_record_set.ingress.name
+}
+

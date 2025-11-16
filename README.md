@@ -72,6 +72,7 @@ Google Cloud Platform (GCP) と Terraform を使用した、学習用のGKEク�
 4. **Cloud SQL**: PostgreSQLデータベース (最小構成)
 5. **Load Balancer**: GKE Ingress経由でのHTTPS通信
 6. **Managed Certificate**: Google マネージド SSL証明書
+7. **Cloud DNS**: ドメイン管理とAレコード自動登録
 
 ## 📦 前提条件
 
@@ -132,7 +133,8 @@ Google Cloud Platform (GCP) と Terraform を使用した、学習用のGKEク�
      container.googleapis.com \
      artifactregistry.googleapis.com \
      sqladmin.googleapis.com \
-     servicenetworking.googleapis.com
+     servicenetworking.googleapis.com \
+     dns.googleapis.com
    
    # 課金アカウントのリンク（要課金アカウント設定）
    gcloud beta billing accounts list
@@ -151,7 +153,8 @@ Google Cloud Platform (GCP) と Terraform を使用した、学習用のGKEク�
      container.googleapis.com \
      artifactregistry.googleapis.com \
      sqladmin.googleapis.com \
-     servicenetworking.googleapis.com
+     servicenetworking.googleapis.com \
+     dns.googleapis.com
    
    # 課金アカウントのリンク
    gcloud beta billing projects link gcloud-and-terraform-stg \
@@ -170,6 +173,38 @@ gsutil mb -p gcloud-and-terraform -l asia-northeast1 gs://gcloud-and-terraform-t
 # バージョニング有効化（推奨）
 gsutil versioning set on gs://gcloud-and-terraform-tfstate
 ```
+
+### Cloud DNSゾーンの確認
+
+**重要**: このプロジェクトでは、既存のCloud DNSゾーンを使用します。各プロジェクトに以下のゾーンが作成されている必要があります。
+
+```bash
+# Dev環境のDNSゾーンを確認
+gcloud config set project gcloud-and-terraform
+gcloud dns managed-zones list
+
+# 出力例:
+# NAME                   DNS_NAME                DESCRIPTION  VISIBILITY
+# dev-gcp-tomohiko-io    dev.gcp.tomohiko.io.    ...          public
+
+# Stg環境のDNSゾーンを確認
+gcloud config set project gcloud-and-terraform-stg
+gcloud dns managed-zones list
+
+# 出力例:
+# NAME                   DNS_NAME                DESCRIPTION  VISIBILITY
+# stg-gcp-tomohiko-io    stg.gcp.tomohiko.io.    ...          public
+```
+
+**ゾーン名の設定**:
+- Dev環境: ゾーン名 `dev-gcp-tomohiko-io` でドメイン `dev.gcp.tomohiko.io`
+- Stg環境: ゾーン名 `stg-gcp-tomohiko-io` でドメイン `stg.gcp.tomohiko.io`
+
+もしゾーン名が異なる場合は、`terraform/variables.tf` の `dns_zone_name` を実際のゾーン名に変更してください。
+
+**Terraformによる自動DNS設定**:
+- `terraform apply` 実行時に、Ingress用の静的IPが自動的にAレコードとして登録されます
+- 手動でのDNS設定は不要です
 
 ## 🚀 セットアップ手順
 
@@ -204,25 +239,33 @@ make apply-dev
 make output-dev
 ```
 
-### 3. DNS設定
+### 3. DNS設定の確認
 
-Terraformの出力から `ingress_ip` を取得し、DNSレコードを設定します。
+**Terraformが自動的にDNSレコードを登録します！**
+
+`terraform apply` 実行後、以下のDNSレコードが自動的に作成されます：
 
 ```bash
-# 静的IPアドレスの取得
-cd terraform
-terraform output ingress_ip
-# 例: 34.xxx.xxx.xxx
+# DNSレコードの確認
+make output-dev
+
+# 出力例:
+# dns_record_fqdn = "sample-gke.dev.gcp.tomohiko.io."
+# ingress_ip = "34.xxx.xxx.xxx"
 ```
 
-**DNSレコード設定例** (お使いのDNSプロバイダーで設定)
+DNSレコードの伝搬を確認：
 
+```bash
+# DNSが正しく設定されたか確認
+dig sample-gke.dev.gcp.tomohiko.io
+nslookup sample-gke.dev.gcp.tomohiko.io
+
+# Cloud DNSで確認
+gcloud dns record-sets list --zone=dev-gcp-tomohiko-io --project=gcloud-and-terraform
 ```
-Type: A
-Name: sample-gke.dev.gcp.tomohiko.io
-Value: 34.xxx.xxx.xxx (Terraformのoutputで取得したIP)
-TTL: 300
-```
+
+**注意**: DNS伝搬には数分かかる場合があります（通常は1-5分）。
 
 ### 4. Dockerイメージのビルドとプッシュ
 
@@ -245,6 +288,10 @@ make status-dev
 
 Google マネージドSSL証明書のプロビジョニングには最大で15-30分かかります。
 
+**前提条件**: 
+- DNSレコードが正しく設定されている（Terraformが自動設定済み）
+- DNSが伝搬している（通常1-5分）
+
 ```bash
 # GKEに接続
 make connect-dev
@@ -254,6 +301,10 @@ kubectl describe managedcertificate managed-cert
 
 # Status が "Active" になるまで待機
 # ドメインが正しくIPアドレスに解決されていることが必要です
+
+# DNSの伝搬確認
+dig sample-gke.dev.gcp.tomohiko.io +short
+# Ingress IPが返ってくればOK
 ```
 
 ### 7. アプリケーションへのアクセス
@@ -358,7 +409,7 @@ kubectl delete -f k8s/generated/dev/
 | **Artifact Registry** | ストレージ 1GB以下 | $0.10 - $1 | 無料枠内でほぼ無料 |
 | **Compute Engine Persistent Disk** | 10GB Standard PD for GKE | $0.40 - $2 | GKEノード用ディスク |
 | **VPC / Networking** | Private IP, NAT Gateway（不使用） | $1 - $3 | VPC Peeringやegress料金 |
-| **Cloud DNS** | 1 ホストゾーン（外部DNSの場合は不要） | $0.20 - $1 | 外部DNSなら無料 |
+| **Cloud DNS** | DNSレコード追加のみ（既存ゾーン使用） | $0 - $0.10 | Terraformが自動管理、ゾーン料金は含まず |
 
 **合計: 約 $37 - $62 / 月 (約 ¥5,500 - ¥9,300)**
 
@@ -413,18 +464,33 @@ GCPには新規ユーザー向けに$300の無料クレジットがあります�
 
 ### 1. SSL証明書がActiveにならない
 
-**原因**: DNSレコードが正しく設定されていない、またはプロパゲーション待ち
+**原因**: DNSレコードの伝搬待ち、またはTerraformによるDNS設定の問題
 
 **解決策**:
 ```bash
-# DNSの確認
-dig sample-gke.dev.gcp.tomohiko.io
+# TerraformでDNSレコードが正しく作成されたか確認
+cd terraform
+terraform output dns_record_fqdn
+terraform output ingress_ip
+
+# Cloud DNSに登録されているか確認
+gcloud dns record-sets list --zone=dev-gcp-tomohiko-io \
+  --project=gcloud-and-terraform | grep sample-gke
+
+# DNSの伝搬確認
+dig sample-gke.dev.gcp.tomohiko.io +short
 nslookup sample-gke.dev.gcp.tomohiko.io
 
 # SSL証明書の状態確認
 kubectl describe managedcertificate managed-cert
 
 # 15-30分待機してから再確認
+```
+
+**DNSレコードが作成されていない場合**:
+```bash
+# Terraformを再適用
+make apply-dev
 ```
 
 ### 2. Podが起動しない
@@ -475,7 +541,7 @@ gcloud services list --enabled --project=gcloud-and-terraform
 # APIの有効化
 gcloud services enable compute.googleapis.com container.googleapis.com \
   artifactregistry.googleapis.com sqladmin.googleapis.com \
-  servicenetworking.googleapis.com
+  servicenetworking.googleapis.com dns.googleapis.com
 ```
 
 ### 5. "Error 404: The requested URL was not found"
@@ -501,10 +567,10 @@ kubectl describe svc backend
 ### リソースの完全削除
 
 ```bash
-# Dev環境の削除
+# Dev環境の削除（DNSレコードも自動削除されます）
 make destroy-dev
 
-# Stg環境の削除
+# Stg環境の削除（DNSレコードも自動削除されます）
 make destroy-stg
 
 # GCSバケットの削除（Terraform State）
@@ -515,7 +581,18 @@ gcloud projects delete gcloud-and-terraform
 gcloud projects delete gcloud-and-terraform-stg
 ```
 
-**注意**: `destroy` コマンドは全てのリソースを削除します。実行前に確認が求められます。
+**注意**: 
+- `destroy` コマンドは全てのリソース（GKE、Cloud SQL、DNSレコードなど）を削除します
+- DNSレコードも自動的に削除されますが、Cloud DNSゾーン自体は削除されません
+- 実行前に確認が求められます
+
+**DNSレコードの手動確認**（念のため）:
+```bash
+# 削除後の確認
+gcloud dns record-sets list --zone=dev-gcp-tomohiko-io \
+  --project=gcloud-and-terraform | grep sample-gke
+# 何も表示されなければ正常に削除されています
+```
 
 ## 📚 学習リソース
 
@@ -525,6 +602,7 @@ gcloud projects delete gcloud-and-terraform-stg
 - [Terraform GCP Provider](https://registry.terraform.io/providers/hashicorp/google/latest/docs)
 - [Cloud SQL for PostgreSQL](https://cloud.google.com/sql/docs/postgres)
 - [Artifact Registry](https://cloud.google.com/artifact-registry/docs)
+- [Cloud DNS](https://cloud.google.com/dns/docs)
 
 ### 次のステップ
 
