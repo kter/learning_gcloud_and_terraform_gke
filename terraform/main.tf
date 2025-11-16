@@ -114,7 +114,7 @@ resource "google_container_node_pool" "primary_nodes" {
     preemptible  = true
     machine_type = local.gke_machine_type
 
-    disk_size_gb = 12
+    disk_size_gb = 20
     disk_type    = "pd-standard"
 
     oauth_scopes = [

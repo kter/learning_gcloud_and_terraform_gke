@@ -18,8 +18,8 @@ variable "project_configs" {
       domain           = "sample-gke.dev.gcp.tomohiko.io"
       dns_zone_name    = "dev-gcp-tomohiko-io"
       db_tier          = "db-f1-micro"
-      gke_node_count   = 1
-      gke_machine_type = "e2-micro"
+      gke_node_count   = 2
+      gke_machine_type = "e2-medium"
     }
     stg = {
       project_id       = "gcloud-and-terraform-stg"
@@ -29,7 +29,7 @@ variable "project_configs" {
       dns_zone_name    = "stg-gcp-tomohiko-io"
       db_tier          = "db-f1-micro"
       gke_node_count   = 1
-      gke_machine_type = "e2-micro"
+      gke_machine_type = "e2-medium"
     }
   }
 }

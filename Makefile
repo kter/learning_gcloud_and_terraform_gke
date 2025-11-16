@@ -62,10 +62,8 @@ build-push-dev: ## Dev環境用にDockerイメージをビルドしてプッシ�
 	$(eval REGION := asia-northeast1)
 	$(eval REPO_ID := todo-app-dev)
 	gcloud auth configure-docker $(REGION)-docker.pkg.dev
-	docker build -t $(REGION)-docker.pkg.dev/$(PROJECT_ID)/$(REPO_ID)/frontend:latest ./src/frontend
-	docker build -t $(REGION)-docker.pkg.dev/$(PROJECT_ID)/$(REPO_ID)/backend:latest ./src/backend
-	docker push $(REGION)-docker.pkg.dev/$(PROJECT_ID)/$(REPO_ID)/frontend:latest
-	docker push $(REGION)-docker.pkg.dev/$(PROJECT_ID)/$(REPO_ID)/backend:latest
+	docker buildx build --platform linux/amd64 -t $(REGION)-docker.pkg.dev/$(PROJECT_ID)/$(REPO_ID)/frontend:latest ./src/frontend --push
+	docker buildx build --platform linux/amd64 -t $(REGION)-docker.pkg.dev/$(PROJECT_ID)/$(REPO_ID)/backend:latest ./src/backend --push
 	@echo "✅ Images pushed to Artifact Registry (dev)"
 
 build-push-stg: ## Stg環境用にDockerイメージをビルドしてプッシュ
@@ -75,10 +73,8 @@ build-push-stg: ## Stg環境用にDockerイメージをビルドしてプッシ�
 	$(eval REGION := asia-northeast1)
 	$(eval REPO_ID := todo-app-stg)
 	gcloud auth configure-docker $(REGION)-docker.pkg.dev
-	docker build -t $(REGION)-docker.pkg.dev/$(PROJECT_ID)/$(REPO_ID)/frontend:latest ./src/frontend
-	docker build -t $(REGION)-docker.pkg.dev/$(PROJECT_ID)/$(REPO_ID)/backend:latest ./src/backend
-	docker push $(REGION)-docker.pkg.dev/$(PROJECT_ID)/$(REPO_ID)/frontend:latest
-	docker push $(REGION)-docker.pkg.dev/$(PROJECT_ID)/$(REPO_ID)/backend:latest
+	docker buildx build --platform linux/amd64 -t $(REGION)-docker.pkg.dev/$(PROJECT_ID)/$(REPO_ID)/frontend:latest ./src/frontend --push
+	docker buildx build --platform linux/amd64 -t $(REGION)-docker.pkg.dev/$(PROJECT_ID)/$(REPO_ID)/backend:latest ./src/backend --push
 	@echo "✅ Images pushed to Artifact Registry (stg)"
 
 # GKEクラスタへの接続
@@ -103,14 +99,15 @@ prepare-k8s-dev: ## Dev環境用にK8sマニフェストを準備
 	$(eval REPO_ID := todo-app-dev)
 	$(eval DB_IP := $(shell cd terraform && terraform output -raw db_private_ip))
 	$(eval DB_USER := $(shell cd terraform && terraform output -raw db_user))
-	$(eval DB_PASSWORD := $(shell cd terraform && terraform output -raw db_password))
+	$(eval DB_PASSWORD_RAW := $(shell cd terraform && terraform output -raw db_password))
+	$(eval DB_PASSWORD := $(shell printf '%s\n' '$(DB_PASSWORD_RAW)' | sed 's/[&/\]/\\&/g'))
 	$(eval SA_EMAIL := $(shell cd terraform && terraform output -raw service_account_email))
 	@mkdir -p k8s/generated/dev
 	@for file in k8s/*.yaml; do \
 		sed -e 's|REGION-docker.pkg.dev/PROJECT_ID/REPO_ID|$(REGION)-docker.pkg.dev/$(PROJECT_ID)/$(REPO_ID)|g' \
 		    -e 's|DB_PRIVATE_IP|$(DB_IP)|g' \
-		    -e 's|DB_USER|$(DB_USER)|g' \
-		    -e 's|DB_PASSWORD|$(DB_PASSWORD)|g' \
+		    -e 's|PLACEHOLDER_DB_USER|$(DB_USER)|g' \
+		    -e 's|PLACEHOLDER_DB_PASSWORD|$(DB_PASSWORD)|g' \
 		    -e 's|GKE_WORKLOAD_SA_EMAIL|$(SA_EMAIL)|g' \
 		    -e 's|INGRESS_IP_NAME|ingress-ip-dev|g' \
 		    -e 's|SSL_CERT_NAME|managed-cert|g' \
@@ -127,14 +124,15 @@ prepare-k8s-stg: ## Stg環境用にK8sマニフェストを準備
 	$(eval REPO_ID := todo-app-stg)
 	$(eval DB_IP := $(shell cd terraform && terraform output -raw db_private_ip))
 	$(eval DB_USER := $(shell cd terraform && terraform output -raw db_user))
-	$(eval DB_PASSWORD := $(shell cd terraform && terraform output -raw db_password))
+	$(eval DB_PASSWORD_RAW := $(shell cd terraform && terraform output -raw db_password))
+	$(eval DB_PASSWORD := $(shell printf '%s\n' '$(DB_PASSWORD_RAW)' | sed 's/[&/\]/\\&/g'))
 	$(eval SA_EMAIL := $(shell cd terraform && terraform output -raw service_account_email))
 	@mkdir -p k8s/generated/stg
 	@for file in k8s/*.yaml; do \
 		sed -e 's|REGION-docker.pkg.dev/PROJECT_ID/REPO_ID|$(REGION)-docker.pkg.dev/$(PROJECT_ID)/$(REPO_ID)|g' \
 		    -e 's|DB_PRIVATE_IP|$(DB_IP)|g' \
-		    -e 's|DB_USER|$(DB_USER)|g' \
-		    -e 's|DB_PASSWORD|$(DB_PASSWORD)|g' \
+		    -e 's|PLACEHOLDER_DB_USER|$(DB_USER)|g' \
+		    -e 's|PLACEHOLDER_DB_PASSWORD|$(DB_PASSWORD)|g' \
 		    -e 's|GKE_WORKLOAD_SA_EMAIL|$(SA_EMAIL)|g' \
 		    -e 's|INGRESS_IP_NAME|ingress-ip-stg|g' \
 		    -e 's|SSL_CERT_NAME|managed-cert|g' \

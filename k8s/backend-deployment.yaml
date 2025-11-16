@@ -44,11 +44,11 @@ spec:
               key: password
         resources:
           requests:
-            memory: "128Mi"
-            cpu: "100m"
+            memory: "96Mi"
+            cpu: "50m"
           limits:
-            memory: "256Mi"
-            cpu: "200m"
+            memory: "192Mi"
+            cpu: "100m"
 ---
 apiVersion: v1
 kind: Secret
@@ -56,7 +56,7 @@ metadata:
   name: db-credentials
 type: Opaque
 stringData:
-  username: "DB_USER"
-  password: "DB_PASSWORD"
-  database-url: "postgresql://DB_USER:DB_PASSWORD@DB_PRIVATE_IP:5432/tododb"
+  username: "PLACEHOLDER_DB_USER"
+  password: "PLACEHOLDER_DB_PASSWORD"
+  database-url: "postgresql://PLACEHOLDER_DB_USER:PLACEHOLDER_DB_PASSWORD@DB_PRIVATE_IP:5432/tododb"
 
