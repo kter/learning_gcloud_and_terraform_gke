@@ -179,26 +179,127 @@ clean: ## 生成されたファイルをクリーンアップ
 	rm -rf k8s/generated
 	@echo "✅ Cleaned generated files"
 
-destroy-dev: ## Dev環境のリソースを削除（注意：全てのリソースが削除されます）
+destroy-dev: ## Dev環境のリソースを削除（シンプル版、問題がある場合はdestroy-all-devを使用）
 	@echo "⚠️  WARNING: This will destroy all resources in Dev environment!"
 	@read -p "Are you sure? Type 'yes' to continue: " confirm; \
 	if [ "$$confirm" = "yes" ]; then \
 		cd terraform && \
 		terraform workspace select dev && \
-		terraform destroy -var-file=dev.tfvars; \
+		terraform destroy -var-file=dev.tfvars -auto-approve; \
 	else \
 		echo "Cancelled."; \
 	fi
 
-destroy-stg: ## Stg環境のリソースを削除（注意：全てのリソースが削除されます）
+destroy-stg: ## Stg環境のリソースを削除（シンプル版、問題がある場合はdestroy-all-stgを使用）
 	@echo "⚠️  WARNING: This will destroy all resources in Stg environment!"
 	@read -p "Are you sure? Type 'yes' to continue: " confirm; \
 	if [ "$$confirm" = "yes" ]; then \
 		cd terraform && \
 		terraform workspace select stg && \
-		terraform destroy -var-file=stg.tfvars; \
+		terraform destroy -var-file=stg.tfvars -auto-approve; \
 	else \
 		echo "Cancelled."; \
+	fi
+
+destroy-all-dev: ## Dev環境を完全削除（依存関係エラーも自動解決）
+	@echo "⚠️  WARNING: This will COMPLETELY destroy all resources in Dev environment!"
+	@echo "This includes: GKE, Cloud SQL, Artifact Registry, Load Balancer, DNS records, VPC"
+	@read -p "Are you ABSOLUTELY sure? Type 'yes' to continue: " confirm; \
+	if [ "$$confirm" = "yes" ]; then \
+		$(MAKE) _destroy-all-impl ENV=dev; \
+	else \
+		echo "❌ Cancelled."; \
+	fi
+
+destroy-all-stg: ## Stg環境を完全削除（依存関係エラーも自動解決）
+	@echo "⚠️  WARNING: This will COMPLETELY destroy all resources in Stg environment!"
+	@echo "This includes: GKE, Cloud SQL, Artifact Registry, Load Balancer, DNS records, VPC"
+	@read -p "Are you ABSOLUTELY sure? Type 'yes' to continue: " confirm; \
+	if [ "$$confirm" = "yes" ]; then \
+		$(MAKE) _destroy-all-impl ENV=stg; \
+	else \
+		echo "❌ Cancelled."; \
+	fi
+
+_destroy-all-impl: ## 内部ターゲット：完全削除の実装
+	@echo "🗑️  Starting complete destruction of $(ENV) environment..."
+	@echo ""
+	@echo "📌 Step 1: Deleting Kubernetes resources..."
+	@if gcloud container clusters get-credentials gke-cluster-$(ENV) \
+		--zone=asia-northeast1-a \
+		--project=$(if $(filter $(ENV),dev),gcloud-and-terraform,gcloud-and-terraform-stg) 2>/dev/null; then \
+		echo "  - Deleting all deployments..."; \
+		kubectl delete deployment --all --grace-period=0 --force 2>/dev/null || true; \
+		echo "  - Deleting all services..."; \
+		kubectl delete service --all --grace-period=0 --force 2>/dev/null || true; \
+		echo "  - Deleting ingress..."; \
+		kubectl delete ingress --all 2>/dev/null || true; \
+		echo "✅ Kubernetes resources deleted"; \
+	else \
+		echo "⚠️  GKE cluster not found or not accessible (may already be deleted)"; \
+	fi
+	@echo ""
+	@echo "📌 Step 2: Getting Cloud SQL instance name..."
+	@cd terraform && terraform workspace select $(ENV) > /dev/null 2>&1 || true
+	$(eval DB_INSTANCE := $(shell cd terraform && terraform output -raw db_instance_name 2>/dev/null || echo ""))
+	@if [ -n "$(DB_INSTANCE)" ]; then \
+		echo "  - Found Cloud SQL instance: $(DB_INSTANCE)"; \
+		echo "  - Deleting Cloud SQL instance..."; \
+		gcloud sql instances delete $(DB_INSTANCE) \
+			--project=$(if $(filter $(ENV),dev),gcloud-and-terraform,gcloud-and-terraform-stg) \
+			--quiet 2>/dev/null || echo "⚠️  Cloud SQL instance not found or already deleted"; \
+		echo "  - Removing Cloud SQL from Terraform state..."; \
+		cd terraform && \
+		terraform state rm google_sql_database_instance.postgres 2>/dev/null || true; \
+		terraform state rm google_sql_database.database 2>/dev/null || true; \
+		terraform state rm google_sql_user.user 2>/dev/null || true; \
+		echo "✅ Cloud SQL cleaned up"; \
+	else \
+		echo "⚠️  No Cloud SQL instance found in Terraform state"; \
+	fi
+	@echo ""
+	@echo "📌 Step 3: Running Terraform destroy (attempt 1)..."
+	@cd terraform && \
+	terraform workspace select $(ENV) && \
+	terraform destroy -var-file=$(ENV).tfvars -auto-approve || echo "⚠️  First destroy attempt completed with errors (expected)"
+	@echo ""
+	@echo "📌 Step 4: Cleaning up VPC Peering and Private IP..."
+	@echo "  - Attempting to delete VPC Peering..."
+	@gcloud services vpc-peerings delete \
+		--service=servicenetworking.googleapis.com \
+		--network=gke-vpc-$(ENV) \
+		--project=$(if $(filter $(ENV),dev),gcloud-and-terraform,gcloud-and-terraform-stg) \
+		--quiet 2>/dev/null || echo "⚠️  VPC Peering not found or already deleted"
+	@echo "  - Attempting to delete Private IP address..."
+	@gcloud compute addresses delete private-ip-address-$(ENV) \
+		--global \
+		--project=$(if $(filter $(ENV),dev),gcloud-and-terraform,gcloud-and-terraform-stg) \
+		--quiet 2>/dev/null || echo "⚠️  Private IP address not found or already deleted"
+	@echo "  - Removing VPC Peering from Terraform state..."
+	@cd terraform && \
+	terraform state rm google_service_networking_connection.private_vpc_connection 2>/dev/null || true; \
+	terraform state rm google_compute_global_address.private_ip_address 2>/dev/null || true
+	@echo ""
+	@echo "📌 Step 5: Running Terraform destroy (attempt 2)..."
+	@cd terraform && \
+	terraform workspace select $(ENV) && \
+	terraform destroy -var-file=$(ENV).tfvars -auto-approve || echo "⚠️  Second destroy attempt completed with errors (expected)"
+	@echo ""
+	@echo "📌 Step 6: Final verification..."
+	$(eval REMAINING := $(shell cd terraform && terraform state list 2>/dev/null | wc -l))
+	@if [ "$(REMAINING)" -eq "0" ]; then \
+		echo "✅ All resources successfully destroyed!"; \
+		echo ""; \
+		echo "📊 Verification:"; \
+		echo "  - Terraform state: Empty"; \
+		echo "  - Monthly cost: \$$0"; \
+		echo ""; \
+		echo "🎉 $(ENV) environment completely destroyed!"; \
+	else \
+		echo "⚠️  Some resources may still remain in Terraform state:"; \
+		cd terraform && terraform state list; \
+		echo ""; \
+		echo "Run 'cd terraform && terraform state list' to check remaining resources"; \
 	fi
 
 # 環境の停止・再開

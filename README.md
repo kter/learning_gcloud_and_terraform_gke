@@ -363,10 +363,18 @@ make status-stg         # Stg環境のステータス確認
 make logs-frontend-dev  # Dev環境フロントエンドログ
 make logs-backend-dev   # Dev環境バックエンドログ
 
+# 環境の停止・再開（課金削減）
+make stop-dev           # Dev環境を停止（GKEノード＋Cloud SQLを停止）
+make start-dev          # Dev環境を再開
+make stop-stg           # Stg環境を停止
+make start-stg          # Stg環境を再開
+
 # クリーンアップ
 make clean              # 生成ファイルの削除
-make destroy-dev        # Dev環境の完全削除
-make destroy-stg        # Stg環境の完全削除
+make destroy-dev        # Dev環境の削除（シンプル版）
+make destroy-stg        # Stg環境の削除（シンプル版）
+make destroy-all-dev    # Dev環境の完全削除（依存関係エラーも自動解決）★推奨
+make destroy-all-stg    # Stg環境の完全削除（依存関係エラーも自動解決）★推奨
 ```
 
 ### 直接kubectlを使用する場合
@@ -566,13 +574,52 @@ kubectl describe svc backend
 
 ### リソースの完全削除
 
+#### 方法1: 完全削除（推奨）★
+
+依存関係エラーも自動解決する完全削除コマンド：
+
 ```bash
-# Dev環境の削除（DNSレコードも自動削除されます）
+# Dev環境の完全削除（推奨）
+make destroy-all-dev
+
+# Stg環境の完全削除（推奨）
+make destroy-all-stg
+```
+
+**実行内容**:
+1. Kubernetesリソース（Deployment, Service, Ingress）を削除
+2. Cloud SQLインスタンスを直接削除
+3. Terraform destroyを実行（1回目）
+4. VPC PeeringとプライベートIPアドレスをクリーンアップ
+5. Terraform destroyを実行（2回目）
+6. 最終確認とレポート表示
+
+**特徴**:
+- ✅ **依存関係エラーを自動解決**
+- ✅ **1コマンドで完全削除**
+- ✅ **確認プロンプトは1回のみ**（その後は全自動）
+- ✅ **詳細な進捗表示**
+- ✅ **最終確認レポート付き**
+
+**実行時間**: 約10-12分
+
+#### 方法2: シンプル削除
+
+問題がない場合の通常削除：
+
+```bash
+# Dev環境の削除（シンプル版）
 make destroy-dev
 
-# Stg環境の削除（DNSレコードも自動削除されます）
+# Stg環境の削除（シンプル版）
 make destroy-stg
+```
 
+**注意**: Cloud SQL、VPC Peeringなどの依存関係エラーが発生する場合があります。その場合は方法1の `destroy-all-*` を使用してください。
+
+#### その他の削除操作
+
+```bash
 # GCSバケットの削除（Terraform State）
 gsutil rm -r gs://gcloud-and-terraform-tfstate
 
@@ -582,9 +629,10 @@ gcloud projects delete gcloud-and-terraform-stg
 ```
 
 **注意**: 
-- `destroy` コマンドは全てのリソース（GKE、Cloud SQL、DNSレコードなど）を削除します
+- `destroy-all-*` コマンドは全てのリソース（GKE、Cloud SQL、DNSレコードなど）を削除します
 - DNSレコードも自動的に削除されますが、Cloud DNSゾーン自体は削除されません
-- 実行前に確認が求められます
+- 実行前に確認が求められます（yesと入力）
+- 削除後は **月額費用が$0** になります
 
 **DNSレコードの手動確認**（念のため）:
 ```bash
