@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  labels:
+    app: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      serviceAccountName: todo-app-ksa
+      containers:
+      - name: frontend
+        image: REGION-docker.pkg.dev/PROJECT_ID/REPO_ID/frontend:latest
+        ports:
+        - containerPort: 3000
+        env:
+        - name: NUXT_PUBLIC_API_BASE
+          value: "http://backend:8000"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: todo-app-ksa
+  annotations:
+    iam.gke.io/gcp-service-account: GKE_WORKLOAD_SA_EMAIL
+

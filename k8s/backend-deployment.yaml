@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  labels:
+    app: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      serviceAccountName: todo-app-ksa
+      containers:
+      - name: backend
+        image: REGION-docker.pkg.dev/PROJECT_ID/REPO_ID/backend:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: db-credentials
+              key: database-url
+        - name: DB_HOST
+          value: "DB_PRIVATE_IP"
+        - name: DB_PORT
+          value: "5432"
+        - name: DB_NAME
+          value: "tododb"
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: db-credentials
+              key: username
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: db-credentials
+              key: password
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: db-credentials
+type: Opaque
+stringData:
+  username: "DB_USER"
+  password: "DB_PASSWORD"
+  database-url: "postgresql://DB_USER:DB_PASSWORD@DB_PRIVATE_IP:5432/tododb"
+
