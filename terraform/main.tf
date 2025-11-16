@@ -101,6 +101,9 @@ resource "google_container_cluster" "primary" {
       start_time = "03:00"
     }
   }
+
+  # 学習環境のため削除保護を無効化
+  deletion_protection = false
 }
 
 # GKEノードプール
